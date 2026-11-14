@@ -32,7 +32,7 @@ def _api_key() -> str:
 
 
 def _model() -> str:
-    return os.environ.get("GEMINI_MODEL", "gemini-3.7-flash")
+    return os.environ.get("GEMINI_MODEL", "gemini-3.8-flash")
 
 
 def ai_mode() -> str:
@@ -89,9 +89,17 @@ def analyze_assessment(answers: list[dict], total_score: int, severity_level: st
     if _api_key():
         try:
             return _analyze_with_gemini(answers, total_score, severity_level, self_harm_risk_flag)
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, KeyError, IndexError) as err:
-            print(f"เรียก Gemini ไม่สำเร็จ ใช้ fallback แทน: {err}")
+        except Exception as err:  # v29 พังแบบไหนก็ได้ (เน็ต รูปแบบคำตอบแปลก ฯลฯ) -> ใช้ fallback ไม่ให้ผู้ใช้เห็น error
+            print(f"เรียก Gemini ไม่สำเร็จ ใช้ fallback แทน: {type(err).__name__}: {err}")
     return _analyze_fallback(total_score, severity_level, self_harm_risk_flag)
+
+
+def _as_text(value) -> str:
+    """v29 Gemini บางครั้งตอบคำแนะนำเป็นลิสต์ ["...", "..."] แทนข้อความ -> รวมเป็นข้อความทีละบรรทัด
+    (เดิมส่งลิสต์ลงฐานข้อมูลตรงๆ แล้ว SQLite บันทึกไม่ได้ ทำให้กดส่งแบบประเมินไม่สำเร็จ)"""
+    if isinstance(value, list):
+        return "\n".join(f"• {str(v).strip().lstrip('•-').strip()}" for v in value if str(v).strip())
+    return str(value).strip() if value is not None else ""
 
 
 def _analyze_with_gemini(answers, total_score, severity_level, self_harm_risk_flag) -> dict:
@@ -119,12 +127,27 @@ def _analyze_with_gemini(answers, total_score, severity_level, self_harm_risk_fl
     text = _call_gemini(system, [{"role": "user", "parts": [{"text": user}]}], max_tokens=2048, temperature=0.3)
     match = re.search(r"\{[\s\S]*\}", text)
     parsed = json.loads(match.group(0) if match else text)
+    if not isinstance(parsed, dict):
+        raise ValueError("Gemini ไม่ได้ตอบเป็น JSON object")
+    summary, reco = _as_text(parsed.get("summary_text")), _as_text(parsed.get("recommendation_text"))
+    if not summary or not reco:
+        raise ValueError("Gemini ตอบไม่มีสรุปหรือคำแนะนำ")
+    label = parsed.get("risk_label")
+    fallback = _analyze_fallback(total_score, severity_level, self_harm_risk_flag)
+    if label not in ("low_risk", "at_risk", "high_risk") or (self_harm_risk_flag and label != "high_risk"):
+        label = fallback["risk_label"]  # ระดับความเสี่ยงยึดเกณฑ์ของระบบเราเมื่อ Gemini ตอบแปลกหรือต่ำกว่าเกณฑ์
+    try:
+        prob = round(min(1.0, max(0.0, float(parsed.get("risk_probability")))), 3)
+    except (TypeError, ValueError):
+        prob = fallback["risk_probability"]
+    if self_harm_risk_flag and "1323" not in reco:
+        reco += "\n• หากรู้สึกไม่ปลอดภัยหรือมีความคิดทำร้ายตนเอง โทรสายด่วนสุขภาพจิต 1323 ได้ตลอด 24 ชั่วโมง"
 
     return {
-        "risk_label": parsed.get("risk_label"),
-        "risk_probability": parsed.get("risk_probability"),
-        "summary_text": parsed.get("summary_text"),
-        "recommendation_text": parsed.get("recommendation_text"),
+        "risk_label": label,
+        "risk_probability": prob,
+        "summary_text": summary,
+        "recommendation_text": reco,
         "model_name": "gemini",
         "model_version": _model(),
     }
@@ -211,7 +234,7 @@ def reply_to_chat(history: list[dict], sentiment: str, safety: dict | None = Non
     meta = {"layout": draft["layout"], "intent": draft["intent"], "topic": draft.get("topic"),
             "secondary_topic": draft.get("secondary_topic"), "confidence": draft.get("confidence"),
             "topic_source": draft.get("topic_source", "none"), "dialogue_id": draft.get("dialogue_id")}
-    result = {**meta, "reply_text": draft["reply_text"], "reply_parts": draft["parts"], "model_name": "rule-based", "model_version": "v26"}
+    result = {**meta, "reply_text": draft["reply_text"], "reply_parts": draft["parts"], "model_name": "rule-based", "model_version": "v29"}
 
     def finish(out):
         out["safety_blocked"] = bool(getattr(_guard, "blocked", False))
@@ -241,8 +264,8 @@ def reply_to_chat(history: list[dict], sentiment: str, safety: dict | None = Non
         if polished:
             return finish({**meta, "reply_text": "\n\n".join(polished), "reply_parts": polished,
                            "model_name": "rule-based+gemini", "model_version": _model()})
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, KeyError, IndexError) as err:
-        print(f"เรียก Gemini ไม่สำเร็จ ใช้คำตอบจากระบบเราแทน: {err}")
+    except Exception as err:  # v29 พังแบบไหนก็ได้ -> ใช้คำตอบจากระบบเรา (เดิมจับแค่บางแบบ ที่เหลือกลายเป็น error 500)
+        print(f"เรียก Gemini ไม่สำเร็จ ใช้คำตอบจากระบบเราแทน: {type(err).__name__}: {err}")
     return finish(result)
 
 
@@ -792,7 +815,7 @@ def classify_crisis_with_gemini(text: str) -> str | None:
         raw = _call_gemini(system, [{"role": "user", "parts": [{"text": text}]}], 30, temperature=0.0, timeout=8)
         m = re.search(r'"level"\s*:\s*"(HIGH|MODERATE|NONE)"', raw)
         level = m.group(1) if m else None
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, KeyError, IndexError) as err:
+    except Exception as err:  # v29
         print(f"Gemini ตรวจวิกฤตไม่สำเร็จ ใช้ผล keyword + NLP อย่างเดียว: {err}")
         level = None
     _CRISIS_CACHE[text] = level
