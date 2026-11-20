@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="th">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>ใจดี · ผู้ดูแล</title>
+    <link rel="stylesheet" href="/style.css" />
+    <style>
+      .admin-shell { max-width: 1180px; margin: 0 auto; padding: 1.5rem 1rem 4rem; }
+      .admin-top { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
+      .admin-top h1 { margin: 0; font-size: 1.35rem; }
+      .storage-chip { font-size: 0.75rem; padding: 0.15rem 0.55rem; border-radius: 999px; background: var(--accent-soft); color: var(--accent); margin-left: 0.5rem; vertical-align: middle; }
+      .storage-chip.local { background: var(--danger-soft); color: var(--danger); }
+      .tabs { display: flex; flex-wrap: wrap; gap: 0.35rem; border-bottom: 1px solid var(--line); margin-bottom: 1.25rem; }
+      .tabs button { background: none; border: none; border-bottom: 2px solid transparent; padding: 0.55rem 0.85rem; font: inherit; color: var(--ink-soft); cursor: pointer; }
+      .tabs button.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+      .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0.75rem; margin-bottom: 1.25rem; }
+      .tile { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 0.85rem 1rem; }
+      .tile .n { font-size: 1.6rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+      .tile .l { font-size: 0.8rem; color: var(--ink-soft); }
+      .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem; }
+      .bars { display: grid; gap: 0.35rem; font-size: 0.86rem; }
+      .bar { display: grid; grid-template-columns: minmax(90px, 38%) 1fr 3rem; gap: 0.5rem; align-items: center; }
+      .bar .track { height: 0.6rem; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+      .bar .fill { height: 100%; background: var(--accent); }
+      .bar .fill.crisis { background: var(--danger); }
+      .bar .v { text-align: right; font-variant-numeric: tabular-nums; color: var(--ink-soft); }
+      .bar .k { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .filters { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: end; margin-bottom: 0.9rem; }
+      .filters label { font-size: 0.78rem; color: var(--ink-soft); display: grid; gap: 0.2rem; }
+      .filters input, .filters select { padding: 0.4rem 0.55rem; border: 1px solid var(--line); border-radius: 8px; font: inherit; font-size: 0.88rem; background: var(--surface); color: var(--ink); }
+      .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+      table { border-collapse: collapse; width: 100%; font-size: 0.86rem; }
+      th, td { text-align: left; vertical-align: top; padding: 0.55rem 0.65rem; border-bottom: 1px solid var(--line); }
+      th { background: var(--surface-2); font-weight: 600; position: sticky; top: 0; white-space: nowrap; }
+      tr.is-crisis td:first-child { box-shadow: inset 3px 0 0 var(--danger); }
+      td.msg { min-width: 220px; max-width: 360px; white-space: pre-wrap; word-break: break-word; }
+      td.bot { color: var(--ink-soft); }
+      .pill { display: inline-block; font-size: 0.72rem; padding: 0.1rem 0.5rem; border-radius: 999px; background: var(--surface-2); margin: 0 0.2rem 0.2rem 0; white-space: nowrap; }
+      .pill.crisis { background: var(--danger-soft); color: var(--danger); font-weight: 600; }
+      .label-box { display: grid; gap: 0.3rem; min-width: 150px; }
+      .label-box select, .label-box input { padding: 0.3rem 0.4rem; border: 1px solid var(--line); border-radius: 6px; font: inherit; font-size: 0.8rem; background: var(--surface); color: var(--ink); }
+      .label-box .other { font-size: 0.72rem; color: var(--ink-soft); }
+      .small-btn { padding: 0.3rem 0.6rem; font-size: 0.8rem; border-radius: 6px; border: 1px solid var(--accent); background: var(--accent); color: var(--accent-ink); cursor: pointer; font: inherit; }
+      .small-btn.ghost { background: none; color: var(--accent); }
+      .muted { color: var(--ink-soft); font-size: 0.85rem; }
+      .conv-list { display: grid; gap: 0.5rem; }
+      .conv-item { text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0.65rem 0.85rem; cursor: pointer; font: inherit; color: var(--ink); }
+      .conv-item.active { border-color: var(--accent); }
+      .transcript { display: grid; gap: 0.5rem; }
+      .t-user, .t-bot { padding: 0.6rem 0.85rem; border-radius: 12px; max-width: 85%; white-space: pre-wrap; word-break: break-word; font-size: 0.9rem; }
+      .t-user { justify-self: end; background: var(--accent); color: var(--accent-ink); }
+      .t-bot { background: var(--surface-2); }
+      .t-meta { font-size: 0.72rem; color: var(--ink-soft); justify-self: end; }
+      .conv-layout { display: grid; grid-template-columns: minmax(220px, 300px) 1fr; gap: 1rem; }
+      @media (max-width: 720px) { .conv-layout { grid-template-columns: 1fr; } }
+      .notice { background: var(--danger-soft); color: var(--ink); border-radius: 10px; padding: 0.7rem 0.9rem; font-size: 0.86rem; margin-bottom: 1rem; }
+    </style>
+  </head>
+  <body>
+    <div id="admin"></div>
+    <script src="/admin.js"></script>
+  </body>
+</html>

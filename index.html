@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="th">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ใจดี — แอปดูแลสุขภาพใจ</title>
+    <link rel="stylesheet" href="/style.css" />
+
+    <!-- ทำให้ติดตั้งเป็นแอปได้ (PWA) -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#2f6f63" />
+    <link rel="icon" type="image/png" href="/icons/favicon-32.png" />
+    <link rel="apple-touch-icon" href="/icons/icon-180.png" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="ใจดี" />
+  </head>
+  <body>
+    <div id="app"></div>
+    <script src="/app.js"></script>
+    <script>
+      // ลงทะเบียน service worker เพื่อให้เบราว์เซอร์เสนอ "ติดตั้งแอป" ได้ (ถ้าเบราว์เซอร์รองรับ)
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", () => {
+          navigator.serviceWorker.register("/sw.js").catch((err) => {
+            console.warn("ลงทะเบียน service worker ไม่สำเร็จ (แอปยังใช้งานได้ปกติ):", err);
+          });
+        });
+      }
+    </script>
+  </body>
+</html>

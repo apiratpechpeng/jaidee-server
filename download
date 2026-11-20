@@ -1,0 +1,15 @@
+# ห้ามขึ้น GitHub: คีย์ลับ และฐานข้อมูล (มีข้อความแชทของผู้ใช้)
+.env
+*.env
+!.env.example
+*.db
+*.db-journal
+*.sqlite3
+
+# ไฟล์ที่ไม่จำเป็น
+__pycache__/
+*.pyc
+*.zip
+node_modules/
+.DS_Store
+Thumbs.db
