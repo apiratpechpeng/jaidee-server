@@ -55,21 +55,3 @@ create table if not exists research_rating (
 alter table research_chat enable row level security;
 alter table research_assessment enable row level security;
 alter table research_rating enable row level security;
-
--- ---------------------------------------------------------------------
--- v30 สมุดบันทึกความรู้สึก (เพิ่มภายหลัง ถ้าเคยรันไฟล์นี้แล้ว ให้รันแค่ส่วนนี้ใน SQL Editor -> New query)
--- ---------------------------------------------------------------------
-create table if not exists research_journal (
-  id bigint generated always as identity primary key,
-  participant text not null,
-  entry_ref text,
-  mood int,                           -- 1 แย่มาก ... 5 ดีมาก
-  text text,                          -- ข้อความในบันทึก (ลบเบอร์/อีเมล/ชื่อ/โรงเรียนแล้ว)
-  text_length int,
-  crisis_level text,
-  crisis_source text,
-  reply_kind text,
-  age_band text,
-  created_at timestamptz default now()
-);
-alter table research_journal enable row level security;
