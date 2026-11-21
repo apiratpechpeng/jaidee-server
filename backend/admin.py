@@ -153,8 +153,17 @@ def cohen_kappa(pairs: list[tuple[str, str]]):
     return 1.0 if pe == 1 else round((po - pe) / (1 - pe), 3)
 
 
+def _fetch_optional(table: str) -> list[dict]:
+    """v30 ตารางใหม่ (research_journal) อาจยังไม่ได้สร้างบน Supabase -> ถือว่ายังไม่มีข้อมูล ไม่ให้หน้าสรุปพัง"""
+    try:
+        return fetch(table)
+    except (OSError, ValueError):
+        return []
+
+
 def summary() -> dict:
     chats, assessments, ratings = fetch("research_chat"), fetch("research_assessment"), fetch("research_rating")
+    journals = _fetch_optional("research_journal")
     convs: dict = {}
     for r in chats:
         convs.setdefault(r.get("conversation"), 0)
@@ -170,11 +179,11 @@ def summary() -> dict:
     f1 = round(2 * prec * rec / (prec + rec), 3) if prec and rec else None
     return {
         "storage": research_log.mode(),
-        "counts": {"messages": len(chats), "participants": len({r.get("participant") for r in chats + assessments + ratings}),
-                   "conversations": len(convs), "assessments": len(assessments), "ratings": len(ratings),
+        "counts": {"messages": len(chats), "participants": len({r.get("participant") for r in chats + assessments + ratings + journals}),
+                   "conversations": len(convs), "assessments": len(assessments), "ratings": len(ratings), "journals": len(journals),
                    "avg_turns": round(sum(convs.values()) / len(convs), 1) if convs else 0},
         "crisis_level": _count(chats, "crisis_level"), "intent": _count(chats, "intent"), "topic": _count(chats, "topic"),
-        "age_band": _count(chats, "age_band"), "rating": _count(ratings, "bucket"), "severity": _count(assessments, "severity_level"),
+        "age_band": _count(chats, "age_band"), "rating": _count(ratings, "bucket"), "severity": _count(assessments, "severity_level"), "journal_mood": _count(journals, "mood"),
         "labels": {"rater1": sum(1 for r in chats if r.get("rater1_crisis")), "rater2": sum(1 for r in chats if r.get("rater2_crisis")),
                    "both": len(pairs), "kappa_crisis": cohen_kappa(pairs),
                    "system_vs_rater1": {"n": len(sys_vs), "tp": tp, "fp": fp, "fn": fn, "precision": prec, "recall": rec, "f1": f1}},

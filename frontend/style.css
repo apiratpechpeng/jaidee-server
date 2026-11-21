@@ -216,3 +216,56 @@ pre.recommendation { white-space: pre-wrap; font-family: inherit; font-size: 0.9
 .consent-age legend { font-weight: 600; margin-bottom: 0.4rem; }
 .consent-age .radio { display: flex; align-items: center; gap: 0.5rem; margin: 0.3rem 0; font-weight: 400; }
 .consent-age .radio input { width: auto; }
+
+/* ---------- v30 หน้าหลัก: วันนี้ทำอะไรต่อดี ---------- */
+.next-steps { display: grid; gap: 0.6rem; }
+.next-step { display: flex; gap: 0.8rem; align-items: center; flex-wrap: wrap; padding: 0.8rem 0.9rem; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.next-step.primary { border-color: var(--accent); background: var(--accent-soft); }
+.ns-icon { font-size: 1.5rem; line-height: 1; flex: none; }
+.ns-body { flex: 1 1 220px; min-width: 0; }
+.ns-body strong { display: block; font-size: 0.98rem; }
+.ns-body p { margin: 0.1rem 0 0; color: var(--ink-soft); font-size: 0.86rem; }
+.next-step .btn { flex: none; margin-left: auto; }
+
+/* ---------- v30 ประวัติ: กราฟคะแนน ---------- */
+.card-head { display: flex; justify-content: space-between; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.card-head h2 { margin: 0; }
+.score-chart { width: 100%; max-width: 640px; height: auto; display: block; margin: 0.6rem auto 0; }
+.score-chart .band-none { fill: #e6f1ec; }
+.score-chart .band-mild { fill: #f4f1dd; }
+.score-chart .band-moderate { fill: #f7e8d8; }
+.score-chart .band-severe { fill: #f5e0da; }
+.score-chart .band-label { fill: var(--ink-soft); font-size: 11px; opacity: 0.85; }
+.score-chart .axis { fill: var(--ink-soft); font-size: 12px; }
+.score-chart .grid { stroke: var(--line); stroke-width: 1; }
+.score-chart .score-line { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.score-chart .score-dot { fill: var(--surface); stroke: var(--accent); stroke-width: 2; }
+.score-chart .score-dot.risk { fill: var(--danger); stroke: var(--danger); }
+.chart-note { color: var(--ink-soft); font-size: 0.86rem; margin: 0.4rem 0 0; }
+
+/* ---------- v30 บันทึกความรู้สึก ---------- */
+.mood-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.4rem; }
+.mood-pill { display: flex; flex-direction: column; align-items: center; gap: 0.15rem; padding: 0.55rem 0.2rem; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); font-family: inherit; font-size: 0.78rem; cursor: pointer; }
+.mood-pill:hover { border-color: var(--accent); }
+.mood-pill.selected { border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
+.mood-emoji { font-size: 1.6rem; line-height: 1.2; }
+.journal-item .mood-emoji { font-size: 1.1rem; }
+textarea { width: 100%; font-family: inherit; font-size: 1rem; padding: 0.7rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); resize: vertical; }
+.char-count { text-align: right; color: var(--ink-soft); font-size: 0.78rem; }
+.mood-strip { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; }
+.mood-strip > span { display: flex; flex-direction: column; align-items: center; color: var(--ink-soft); font-size: 0.74rem; }
+.journal-item { padding: 0.75rem 0; border-top: 1px solid var(--line); }
+.journal-item:first-of-type { border-top: none; }
+.journal-meta { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; color: var(--ink-soft); font-size: 0.86rem; }
+.journal-text { margin: 0.35rem 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* ---------- v30 ทัวร์แนะนำ ---------- */
+.tour-overlay { position: fixed; inset: 0; z-index: 1000; background: rgba(28, 38, 36, 0.55); display: flex; align-items: center; justify-content: center; padding: 1rem; }
+.tour-card { width: 100%; max-width: 420px; background: var(--surface); border-radius: 18px; padding: 1.5rem 1.3rem 1.1rem; box-shadow: var(--shadow); text-align: center; }
+.tour-icon { font-size: 2.6rem; line-height: 1; }
+.tour-card h2 { margin: 0.6rem 0 0.4rem; }
+.tour-text { color: var(--ink-soft); white-space: pre-line; margin: 0 0 1rem; }
+.tour-dots { display: flex; justify-content: center; gap: 0.35rem; margin-bottom: 1rem; }
+.tour-dots span { width: 8px; height: 8px; border-radius: 50%; background: var(--line); }
+.tour-dots span.on { background: var(--accent); width: 20px; border-radius: 4px; }
+.tour-actions { display: flex; align-items: center; gap: 0.5rem; }

@@ -54,10 +54,12 @@ function renderLogin(msg) {
 
 // ---------------------------------------------------------------- data
 async function loadAll() {
-  const [summary, chat, assess, rating] = await Promise.all([
+  // v30 research_journal อาจยังไม่ได้สร้างใน Supabase -> ถ้าโหลดไม่ได้ให้เป็นรายการว่าง หน้าอื่นยังใช้ได้
+  const [summary, chat, assess, rating, journal] = await Promise.all([
     api("GET", "/summary"), api("GET", "/rows/research_chat"), api("GET", "/rows/research_assessment"), api("GET", "/rows/research_rating"),
+    api("GET", "/rows/research_journal").catch(() => []),
   ]);
-  Object.assign(A.data, { summary, research_chat: chat, research_assessment: assess, research_rating: rating });
+  Object.assign(A.data, { summary, research_chat: chat, research_assessment: assess, research_rating: rating, research_journal: journal });
 }
 
 function toCsv(rows) {
@@ -76,7 +78,8 @@ function download(name, rows) {
 function renderMain() {
   const s = A.data.summary;
   const tabs = [["overview", "ภาพรวม"], ["messages", `ข้อความ (${A.data.research_chat.length})`], ["conversations", "บทสนทนา"],
-                ["assessments", `แบบประเมิน (${A.data.research_assessment.length})`], ["ratings", `ความพึงพอใจ (${A.data.research_rating.length})`]];
+                ["assessments", `แบบประเมิน (${A.data.research_assessment.length})`], ["ratings", `ความพึงพอใจ (${A.data.research_rating.length})`],
+                ["journal", `บันทึกความรู้สึก (${A.data.research_journal.length})`]];
   root.innerHTML = `
     <div class="admin-shell">
       <div class="admin-top">
@@ -100,7 +103,7 @@ function renderMain() {
 }
 function renderTab() {
   const el = root.querySelector("#tab");
-  ({ overview: tabOverview, messages: tabMessages, conversations: tabConversations, assessments: tabAssessments, ratings: tabRatings })[A.tab](el);
+  ({ overview: tabOverview, messages: tabMessages, conversations: tabConversations, assessments: tabAssessments, ratings: tabRatings, journal: tabJournal })[A.tab](el);
 }
 
 // ---------------------------------------------------------------- overview
@@ -115,7 +118,7 @@ function tabOverview(el) {
   const pct = (x) => (x === null || x === undefined ? "-" : Math.round(x * 100) + "%");
   el.innerHTML = `
     <div class="tiles">
-      ${[["ข้อความ", c.messages], ["ผู้เข้าร่วม", c.participants], ["บทสนทนา", c.conversations], ["ข้อความต่อบทสนทนา", c.avg_turns], ["แบบประเมิน", c.assessments], ["ให้คะแนน", c.ratings]]
+      ${[["ข้อความ", c.messages], ["ผู้เข้าร่วม", c.participants], ["บทสนทนา", c.conversations], ["ข้อความต่อบทสนทนา", c.avg_turns], ["แบบประเมิน", c.assessments], ["ให้คะแนน", c.ratings], ["บันทึกความรู้สึก", c.journals ?? 0]]
         .map(([l, n]) => `<div class="tile"><div class="n">${n}</div><div class="l">${l}</div></div>`).join("")}
     </div>
     <div class="grid2">
@@ -124,6 +127,7 @@ function tabOverview(el) {
       <div class="card"><h2>ประเภทการตอบ (intent)</h2>${bars(s.intent)}</div>
       <div class="card"><h2>ผลแบบประเมิน 9Q</h2>${bars(s.severity)}</div>
       <div class="card"><h2>ความพึงพอใจ (0-10)</h2>${bars(s.rating)}</div>
+      <div class="card"><h2>อารมณ์ในบันทึก (1 แย่มาก - 5 ดีมาก)</h2>${bars(Object.fromEntries(Object.entries(s.journal_mood || {}).map(([k, n]) => [`${k} ${MOOD_LABEL[k] || ""}`, n])))}</div>
       <div class="card"><h2>ช่วงอายุ (ข้อความ)</h2>${bars(s.age_band)}</div>
       <div class="card">
         <h2>การติดป้ายของผู้ตรวจ</h2>
@@ -234,6 +238,16 @@ function tabAssessments(el) {
 }
 function tabRatings(el) {
   simpleTable(el, A.data.research_rating, [["created_at", "เวลา", fmtTime], ["participant", "ผู้เข้าร่วม"], ["conversation", "บทสนทนา"], ["bucket", "คะแนน (0-10)"]], "jaidee_ratings.csv");
+}
+
+// v30 บันทึกความรู้สึก (ข้อความลบข้อมูลส่วนตัวแล้ว)
+const MOOD_LABEL = { 1: "แย่มาก", 2: "ไม่ค่อยดี", 3: "เฉยๆ", 4: "ดี", 5: "ดีมาก" };
+function tabJournal(el) {
+  simpleTable(el, A.data.research_journal, [
+    ["created_at", "เวลา", fmtTime], ["participant", "ผู้เข้าร่วม"], ["mood", "อารมณ์", (v) => esc(`${v} ${MOOD_LABEL[v] || ""}`)],
+    ["crisis_level", "วิกฤต", (v) => (v && v !== "NONE" ? `<span class="pill crisis">${esc(v)}</span>` : esc(v ?? "-"))],
+    ["text", "ข้อความ"], ["text_length", "ความยาว"], ["age_band", "อายุ"],
+  ], "jaidee_journal.csv");
 }
 
 // ---------------------------------------------------------------- start

@@ -173,6 +173,17 @@ CREATE TABLE IF NOT EXISTS consent_logs (
     created_at TEXT NOT NULL
 );
 
+-- v30 สมุดบันทึกความรู้สึก (mood 1-5: แย่มาก ไม่ค่อยดี เฉยๆ ดี ดีมาก)
+CREATE TABLE IF NOT EXISTS journal_entries (
+    entry_id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    mood INTEGER NOT NULL CHECK (mood BETWEEN 1 AND 5),
+    content TEXT NOT NULL DEFAULT '',
+    crisis_level TEXT NOT NULL DEFAULT 'NONE',
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_journal_user ON journal_entries(user_id, created_at);
+
 -- v20 ข้อมูลวิจัย (ใช้เมื่อยังไม่ได้ตั้งค่า Supabase ดู research_log.py)
 CREATE TABLE IF NOT EXISTS research_logs (
     log_id INTEGER PRIMARY KEY AUTOINCREMENT,

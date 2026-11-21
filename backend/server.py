@@ -19,7 +19,7 @@ from pathlib import Path
 
 from .ai import ai_mode, analyze_assessment, classify_crisis_with_gemini, gemini_crisis_enabled, reply_to_chat
 from .chatbot import CHATBOT_BUILD, CHECK_IN_REPLY, MAX_BUBBLES
-from .analytics import build_assessment_output, build_chat_output, log_chat_output, shown_card_types
+from .analytics import _safety_cards, build_assessment_output, build_chat_output, log_chat_output, shown_card_types
 from .crisis import assess, detect_sentiment, has_risk_signal
 from .dialogues import answered_yes_to_check
 from . import research_log
@@ -152,45 +152,8 @@ def h_login(conn, user_id, params, body):
     }
 
 
-# โหมดไม่ระบุตัวตน: สร้างบัญชีชั่วคราวทันทีโดยไม่ต้องกรอกอีเมล/รหัสผ่าน/ชื่อจริงเลย
-# ยังคงบันทึกประวัติการทำแบบประเมินและแชทได้ตามปกติ (ผูกกับ user_id ที่สุ่มสร้างให้)
-# แต่ถ้าเคลียร์ข้อมูลเบราว์เซอร์หรือเปลี่ยนเครื่อง จะไม่สามารถกลับเข้าบัญชีเดิมได้ เพราะไม่มี
-# อีเมล/รหัสผ่านให้ล็อกอินซ้ำ — อีเมลที่เก็บในฐานข้อมูลเป็นค่า placeholder ภายใน ไม่แสดงให้ผู้ใช้เห็น
-def h_anonymous_login(conn, user_id, params, body):
-    nickname = (body.get("display_name") or "").strip() or "ผู้ใช้นิรนาม"
-    new_user_id = uuid.uuid4().hex
-    ts = now_iso()
-    placeholder_email = f"anon-{new_user_id}@anonymous.local"
-    random_password_hash = hash_password(uuid.uuid4().hex)  # ไม่มีใครรู้รหัสผ่านนี้ ใช้ล็อกอินซ้ำไม่ได้ตั้งใจ
-
-    conn.execute(
-        """
-        INSERT INTO users (user_id, display_name, email, password_hash, gender, is_anonymous, created_at, updated_at)
-        VALUES (?, ?, ?, ?, 'prefer_not_to_say', 1, ?, ?)
-        """,
-        (new_user_id, nickname, placeholder_email, random_password_hash, ts, ts),
-    )
-    conn.execute(
-        "INSERT INTO notification_preferences (user_id, updated_at) VALUES (?, ?)",
-        (new_user_id, ts),
-    )
-    conn.execute(
-        """
-        INSERT INTO consent_logs (user_id, consent_type, is_granted, consent_version, created_at)
-        VALUES (?, 'anonymous_access', 1, 'v1', ?)
-        """,
-        (new_user_id, ts),
-    )
-    _apply_research_consent(conn, new_user_id, body)
-    conn.commit()
-
-    token = create_session(conn, new_user_id)
-    conn.commit()
-    user = row(conn.execute(
-        "SELECT user_id, display_name, is_anonymous, research_consent FROM users WHERE user_id = ?", (new_user_id,)
-    ).fetchone())
-    user["is_anonymous"] = bool(user["is_anonymous"])
-    return {"token": token, "user": user}
+# v30 เอาโหมดเข้าใช้งานแบบไม่ระบุตัวตนออก (ผู้พัฒนาขอ) ทุกคนต้องสมัครด้วยอีเมล
+# บัญชีไม่ระบุตัวตนเก่าที่ยังล็อกอินค้างอยู่ใช้ต่อได้ แต่สร้างใหม่ไม่ได้แล้ว
 
 
 def h_get_me(conn, user_id, params, body):
@@ -661,6 +624,99 @@ def h_set_research_consent(conn, user_id, params, body):
     return out
 
 
+def h_export_assessments(conn, user_id, params, body):
+    """v30 ประวัติแบบประเมินทั้งหมดพร้อมคำตอบรายข้อ (เก่าไปใหม่) ให้หน้าเว็บสร้างไฟล์ CSV"""
+    items = rows(conn.execute(
+        "SELECT assessment_id, total_score, severity_level, self_harm_risk_flag, completed_at FROM assessments "
+        "WHERE user_id = ? AND status = 'completed' ORDER BY completed_at ASC",
+        (user_id,),
+    ).fetchall())
+    for it in items:
+        ans = conn.execute(
+            "SELECT q.question_no, o.option_value FROM assessment_answers aa "
+            "JOIN phq9_questions q ON q.question_id = aa.question_id JOIN phq9_options o ON o.option_id = aa.option_id "
+            "WHERE aa.assessment_id = ?",
+            (it["assessment_id"],),
+        ).fetchall()
+        it["answers"] = {str(r["question_no"]): r["option_value"] for r in ans}
+        it["severity_label"] = SEVERITY_LABEL_TH.get(it["severity_level"])
+    return items
+
+
+# ---------------------------------------------------------------------
+# v30 สมุดบันทึกความรู้สึก: เขียนระบายเอง บอทไม่ตอบ แต่ตรวจวิกฤตทุกครั้ง
+# ---------------------------------------------------------------------
+MOODS = {1: "แย่มาก", 2: "ไม่ค่อยดี", 3: "เฉยๆ", 4: "ดี", 5: "ดีมาก"}
+JOURNAL_MAX_CHARS = 3000
+
+
+def h_list_journal(conn, user_id, params, body):
+    return rows(conn.execute(
+        "SELECT entry_id, mood, content, crisis_level, created_at FROM journal_entries "
+        "WHERE user_id = ? ORDER BY created_at DESC LIMIT 100",
+        (user_id,),
+    ).fetchall())
+
+
+def h_create_journal(conn, user_id, params, body):
+    try:
+        mood = int(body.get("mood"))
+    except (TypeError, ValueError):
+        mood = 0
+    if mood not in MOODS:
+        raise ApiError(400, "กรุณาเลือกอารมณ์ของวันนี้")
+    content = (body.get("content") or "").strip()
+    if len(content) > JOURNAL_MAX_CHARS:
+        raise ApiError(400, f"เขียนได้ไม่เกิน {JOURNAL_MAX_CHARS} ตัวอักษรต่อครั้ง")
+
+    # ตรวจวิกฤตแบบเดียวกับแชท (keyword + NLP + ถูกทำร้าย) ถ้ามีสัญญาณเสี่ยงและเปิด Gemini ไว้ ให้ Gemini ช่วยดูซ้ำ
+    crisis = {"level": "NONE", "source": None, "reply_kind": None, "abuse": None}
+    if content:
+        second = None
+        if gemini_crisis_enabled() and has_risk_signal(content):
+            second = classify_crisis_with_gemini
+        crisis = assess(content, [], age_group=_age_group(conn, user_id), allow_check_in=False, second_opinion=second)
+    flagged = crisis["reply_kind"] is not None
+
+    entry_id = uuid.uuid4().hex
+    ts = now_iso()
+    conn.execute(
+        "INSERT INTO journal_entries (entry_id, user_id, mood, content, crisis_level, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+        (entry_id, user_id, mood, content, crisis["level"], ts),
+    )
+    if crisis["reply_kind"] in ("crisis", "abuse"):
+        conn.execute(
+            "INSERT INTO emergency_referrals (referral_id, user_id, source_type, source_id, trigger_reason, created_at) "
+            "VALUES (?, ?, 'journal', ?, ?, ?)",
+            (uuid.uuid4().hex, user_id, entry_id,
+             "บันทึกความรู้สึกเล่าว่าถูกทำร้าย/ไม่ปลอดภัย" if crisis["reply_kind"] == "abuse"
+             else "บันทึกความรู้สึกมีสัญญาณความเสี่ยงทำร้ายตนเอง", ts),
+        )
+    conn.commit()
+
+    if _research_ok(conn, user_id):
+        research_log.log("research_journal", {
+            "participant": research_log.pid(user_id), "entry_ref": research_log.pid(entry_id), "mood": mood,
+            "text": research_log.clean(content), "text_length": len(content), "crisis_level": crisis["level"],
+            "crisis_source": crisis.get("source"), "reply_kind": crisis.get("reply_kind"),
+            "age_band": _age_band(conn, user_id), "created_at": ts,
+        })
+
+    return {
+        "entry": {"entry_id": entry_id, "mood": mood, "content": content, "crisis_level": crisis["level"], "created_at": ts},
+        "show_hotline_banner": flagged,
+        "action_cards": _safety_cards(crisis) if flagged else [],
+    }
+
+
+def h_delete_journal(conn, user_id, params, body):
+    cur = conn.execute("DELETE FROM journal_entries WHERE entry_id = ? AND user_id = ?", (params["id"], user_id))
+    conn.commit()
+    if cur.rowcount == 0:
+        raise ApiError(404, "ไม่พบบันทึกนี้")
+    return {"ok": True}
+
+
 # ---------------------------------------------------------------------
 # v21 หน้าผู้ดูแล (/admin) — ดู backend/admin.py
 # ---------------------------------------------------------------------
@@ -696,16 +752,16 @@ ROUTES = [
     ("GET", r"^/api/health$", h_health, False, 200),
     ("POST", r"^/api/admin/login$", h_admin_login, False, 200),
     ("GET", r"^/api/admin/summary$", h_admin_summary, "admin", 200),
-    ("GET", r"^/api/admin/rows/(?P<table>research_chat|research_assessment|research_rating)$", h_admin_rows, "admin", 200),
+    ("GET", r"^/api/admin/rows/(?P<table>research_chat|research_assessment|research_rating|research_journal)$", h_admin_rows, "admin", 200),
     ("PATCH", r"^/api/admin/chat/(?P<id>\d+)$", h_admin_label, "admin", 200),
     ("POST", r"^/api/auth/register$", h_register, False, 201),
     ("POST", r"^/api/auth/login$", h_login, False, 200),
-    ("POST", r"^/api/auth/anonymous$", h_anonymous_login, False, 201),
     ("GET", r"^/api/users/me$", h_get_me, True, 200),
     ("PATCH", r"^/api/users/me$", h_update_me, True, 200),
     ("GET", r"^/api/research/consent$", h_get_research_consent, True, 200),
     ("PUT", r"^/api/research/consent$", h_set_research_consent, True, 200),
     ("GET", r"^/api/assessments/questions$", h_questions, True, 200),
+    ("GET", r"^/api/assessments/export$", h_export_assessments, True, 200),
     ("POST", r"^/api/assessments$", h_submit_assessment, True, 201),
     ("GET", r"^/api/assessments$", h_list_assessments, True, 200),
     ("GET", r"^/api/assessments/(?P<id>[^/]+)$", h_get_assessment, True, 200),
@@ -714,6 +770,9 @@ ROUTES = [
     ("GET", r"^/api/chat/conversations/(?P<id>[^/]+)/messages$", h_list_messages, True, 200),
     ("POST", r"^/api/chat/conversations/(?P<id>[^/]+)/messages$", h_send_message, True, 201),
     ("POST", r"^/api/chat/conversations/(?P<id>[^/]+)/satisfaction$", h_submit_satisfaction, True, 201),
+    ("GET", r"^/api/journal$", h_list_journal, True, 200),
+    ("POST", r"^/api/journal$", h_create_journal, True, 201),
+    ("DELETE", r"^/api/journal/(?P<id>[^/]+)$", h_delete_journal, True, 200),
     ("GET", r"^/api/notifications$", h_list_notifications, True, 200),
     ("PATCH", r"^/api/notifications/(?P<id>[^/]+)/read$", h_mark_read, True, 200),
     ("GET", r"^/api/notifications/preferences$", h_get_preferences, True, 200),
@@ -844,6 +903,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_PUT(self):
         self._dispatch("PUT")
+
+    def do_DELETE(self):
+        self._dispatch("DELETE")
 
 
 def run_server(port: int = 4000):

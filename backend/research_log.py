@@ -21,7 +21,7 @@ import urllib.request
 
 from .privacy import pseudonym, scrub
 
-TABLES = ("research_chat", "research_assessment", "research_rating")
+TABLES = ("research_chat", "research_assessment", "research_rating", "research_journal")  # v30 เพิ่มสมุดบันทึก
 
 
 def _cfg():
